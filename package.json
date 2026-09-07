@@ -1,0 +1,23 @@
+{
+  "name": "aegisfleet-call-e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Governed logistics incident voice coordination prototype built with CALL-E",
+  "scripts": {
+    "demo": "tsx src/cli.ts demo",
+    "live": "tsx src/cli.ts live",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@call-e/calle": "^0.2.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
