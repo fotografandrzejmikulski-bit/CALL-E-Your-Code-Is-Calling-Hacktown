@@ -14,13 +14,14 @@ const demoIncident: Incident = {
 
 async function main() {
   const command = process.argv[2] ?? "demo";
-  const ledger = new AuditLedger();
   const live = command === "live";
+  const ledger = new AuditLedger();
+  const incident = live ? { ...demoIncident, phone: process.env.AEGIS_LIVE_PHONE ?? "" } : demoIncident;
 
   console.log(`AegisFleet | mode=${live ? "LIVE" : "DRY-RUN"}`);
-  console.log(`Incident=${demoIncident.id} vehicle=${demoIncident.vehicleId}`);
+  console.log(`Incident=${incident.id} vehicle=${incident.vehicleId}`);
 
-  const result = await runIncident(demoIncident, { live, ledger });
+  const result = await runIncident(incident, { live, ledger });
 
   console.log(JSON.stringify({
     state: result.record.state,
