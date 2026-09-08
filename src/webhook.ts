@@ -1,24 +1,28 @@
 export interface CalleTerminalEvent {
   id: string;
   call_id: string;
-  status: string;
+  status: "completed" | "failed" | "cancelled" | "unknown";
 }
 
 export class WebhookDeduper {
   private readonly seen = new Set<string>();
 
   accept(eventId: string): boolean {
-    if (!eventId || this.seen.has(eventId)) return false;
-    this.seen.add(eventId);
+    const normalized = eventId.trim();
+    if (!normalized || this.seen.has(normalized)) return false;
+    this.seen.add(normalized);
     return true;
   }
 }
 
-export function validateTerminalEvent(event: unknown): CalleTerminalEvent {
-  if (!event || typeof event !== "object") throw new Error("Invalid webhook body");
-  const value = event as Record<string, unknown>;
-  if (typeof value.id !== "string" || typeof value.call_id !== "string" || typeof value.status !== "string") {
+export function validateTerminalEvent(value: unknown): CalleTerminalEvent {
+  if (!value || typeof value !== "object") throw new Error("Invalid webhook body");
+  const event = value as Record<string, unknown>;
+  const status = event.status;
+  if (typeof event.id !== "string" || typeof event.call_id !== "string" || typeof status !== "string") {
     throw new Error("Webhook body does not match the terminal event contract");
   }
-  return { id: value.id, call_id: value.call_id, status: value.status };
+  const allowed = new Set(["completed", "failed", "cancelled", "unknown"]);
+  if (!allowed.has(status)) throw new Error(`Unsupported terminal status: ${status}`);
+  return { id: event.id, call_id: event.call_id, status: status as CalleTerminalEvent["status"] };
 }
