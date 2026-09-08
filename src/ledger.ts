@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CallRecord, IncidentState } from "./domain.js";
+import type { CallOutcome, CallRecord, IncidentState } from "./domain.js";
 import { assertTransition } from "./fsm.js";
 
 export class AuditLedger {
@@ -7,18 +7,18 @@ export class AuditLedger {
   private readonly keys = new Map<string, CallRecord>();
 
   reserve(operationKey: string): CallRecord {
-    const existing = this.keys.get(operationKey);
+    const key = operationKey.trim();
+    if (!key) throw new Error("operationKey is required");
+    const existing = this.keys.get(key);
     if (existing) return { ...existing };
     const now = new Date().toISOString();
     const record: CallRecord = {
-      operationKey,
+      operationKey: key,
       state: "detected",
       createdAt: now,
       updatedAt: now,
     };
-    record.auditDigest = this.digest(record);
-    this.records.push(record);
-    this.keys.set(operationKey, record);
+    this.commit(record);
     return { ...record };
   }
 
@@ -29,8 +29,24 @@ export class AuditLedger {
     record.state = state;
     record.updatedAt = new Date().toISOString();
     Object.assign(record, patch);
-    record.auditDigest = this.digest(record);
+    this.commit(record);
     return { ...record };
+  }
+
+  complete(operationKey: string, outcome: CallOutcome, callId?: string): CallRecord {
+    const terminalState: IncidentState =
+      outcome.route_acceptance === "yes" &&
+      Boolean(outcome.eta_update_time.trim()) &&
+      outcome.escalation_needed === "none" &&
+      Boolean(outcome.evidence_summary.trim()) &&
+      outcome.confidence === "high"
+        ? "resolved"
+        : "escalated";
+
+    return this.transition(operationKey, terminalState, {
+      outcome,
+      ...(callId ? { callId } : {}),
+    });
   }
 
   has(operationKey: string): boolean {
@@ -39,6 +55,12 @@ export class AuditLedger {
 
   snapshot(): CallRecord[] {
     return this.records.map((record) => ({ ...record }));
+  }
+
+  private commit(record: CallRecord): void {
+    record.auditDigest = this.digest(record);
+    if (!this.keys.has(record.operationKey)) this.records.push(record);
+    this.keys.set(record.operationKey, record);
   }
 
   private digest(record: CallRecord): string {
