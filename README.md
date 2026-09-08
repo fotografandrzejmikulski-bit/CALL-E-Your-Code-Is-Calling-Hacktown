@@ -1,50 +1,47 @@
 # AegisFleet — Incident Voice Command
 
-**Autonomous, safety-gated phone coordination for logistics exceptions, built with CALL-E.**
+**Governed autonomous phone coordination for logistics exceptions, built with CALL-E.**
 
-AegisFleet turns a logistics incident into a governed phone workflow: validate the incident, create a purpose-bounded call task, obtain a structured outcome, verify evidence, and decide whether the event can return to the operational system or must escalate to a human.
+AegisFleet turns a logistics incident into a controlled phone workflow: validate the incident, reserve a stable operation identity, execute a bounded phone task, validate the structured outcome, require evidence for automatic resolution, and escalate whenever the evidence is insufficient.
 
-> **Important:** Live calling is opt-in. The default mode is a deterministic local simulation that performs **zero provider calls**.
+> **Safety default:** `npm run demo` is fully local. It makes zero network requests and places zero phone calls.
 
-## Why this exists
+## Core thesis
 
-Critical logistics work often becomes a telephone problem at the worst possible moment: a route closes, a driver is delayed, a loading slot changes, or a receiving site needs confirmation. A text-only copilot can draft a message but cannot complete the telephone task. CALL-E can execute goal-driven phone work and return structured outcomes. AegisFleet adds the missing enterprise control plane around that capability.
+A voice agent is only useful to an enterprise when its output can be bounded and connected safely to the next business action. AegisFleet therefore focuses on the control plane around the phone call rather than on conversation quality alone.
 
-## What is implemented
-
-- **Incident-to-call orchestration** with an explicit policy gate before provider I/O.
-- **Dry-run simulation** for judges and developers without a CALL-E account.
-- **Live CALL-E adapter** using the TypeScript server SDK when `CALLE_API_KEY` is configured.
-- **Strict result contract** using JSON Schema: explicit enums, `unknown` states, evidence, and `additionalProperties: false`.
-- **Idempotency ledger** that reserves a stable operation key before a live call is created and prevents accidental duplicate execution after retries.
-- **Privacy minimization**: normalized operational identifiers are stored; the demo does not persist full phone numbers or transcripts.
-- **Incident state machine**: `detected → validated → approved → calling → resolved | escalated`.
-- **Human escalation** for ambiguity, failed calls, insufficient evidence, and policy violations.
-- **Webhook skeleton** documenting replay-safe event handling and event-ID deduplication for an asynchronous deployment.
-- **Audit trail** with hash-linked records so the demo can prove what decision was made from which evidence.
-- **Judge-ready demonstration**: one command produces a complete incident lifecycle and a structured outcome.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    A[Incident / Fleet Event] --> B[Policy Gate]
-    B -->|reject| H[Human Escalation]
-    B -->|approve| C[Call Task Builder]
-    C --> D[Idempotency Ledger]
-    D --> E{Execution Mode}
-    E -->|dry-run| F[Deterministic Simulator]
-    E -->|live| G[CALL-E SDK]
-    F --> I[Outcome Validator]
-    G --> I
-    G -. async completion .-> J[Webhook / Reconciliation]
-    J --> I
-    I --> K[Evidence & Confidence Gate]
-    K -->|sufficient| L[ERP-ready Decision]
-    K -->|ambiguous| H
-    L --> M[Audit Ledger]
-    H --> M
+```text
+incident
+  ↓
+policy gate
+  ↓
+idempotency reservation
+  ↓
+CALL-E / deterministic simulator
+  ↓
+strict outcome validation
+  ↓
+evidence + confidence gate
+  ├── resolved → ERP-ready decision
+  └── escalated → human action
+  ↓
+audit ledger
 ```
+
+## Implemented
+
+- TypeScript domain model and explicit incident state machine.
+- Policy gate with E.164 validation, purpose-bounded goals, live-mode opt-in and fixture-number protection.
+- Deterministic dry-run simulator that follows the same outcome-validation path as live execution.
+- CALL-E server SDK adapter with strict result extraction and validation.
+- JSON Schema contract with `additionalProperties: false` and explicit `unknown` states.
+- Application-level idempotency reservation before provider I/O.
+- Evidence-backed automatic resolution; uncertainty never becomes an implicit success/failure.
+- Human escalation on policy rejection, execution errors, insufficient evidence, low confidence or explicit escalation.
+- Replay-aware webhook contract and event-ID deduplication.
+- Hash-linked audit records for tamper-evident sequencing inside the prototype ledger.
+- Automated regression tests and GitHub Actions CI.
+- Grant proposal, architecture, security model and judge-ready three-minute demo script.
 
 ## Quick start
 
@@ -55,74 +52,99 @@ npm test
 npm run typecheck
 ```
 
-Expected result: a simulated A4 closure incident is validated, a call plan is created in dry-run mode, the driver outcome is parsed, and the system reaches `resolved` without placing a phone call.
+The demo creates a synthetic A4 closure incident and shows the complete governed lifecycle without calling CALL-E or a telephone recipient.
 
-## Live CALL-E mode
+## Live CALL-E execution
 
-Create an environment file from `.env.example`, provide your CALL-E credential, and explicitly set `CALL_E_MODE=live`.
+1. Copy `.env.example` to `.env`.
+2. Add a valid `CALLE_API_KEY`.
+3. Set a provisioned test number with `AEGIS_LIVE_PHONE`.
+4. Run `npm run live`.
 
-```bash
-npm run live
-```
-
-The application intentionally does **not** fall back from live to dry-run silently. Missing credentials or invalid live configuration cause a clear failure before provider I/O.
+Live mode is intentionally explicit and does not silently downgrade to dry-run. Invalid configuration fails before provider I/O.
 
 ## Result contract
-
-The provider response is reduced to a small business object:
 
 ```json
 {
   "route_acceptance": "yes",
   "eta_update_time": "16:40",
   "escalation_needed": "none",
-  "evidence_summary": "Driver confirmed the diversion and gave an ETA of 16:40.",
+  "evidence_summary": "Driver confirmed the diversion and stated the revised ETA is 16:40.",
   "confidence": "high"
 }
 ```
 
-The application treats `unknown` as a real state, never as false, and never invents missing facts.
+Automatic resolution requires all five conditions: acceptance = `yes`, non-empty ETA, escalation = `none`, non-empty evidence, and confidence = `high`. Otherwise the incident becomes `escalated`.
+
+## Architecture
+
+See [`docs/architecture.md`](docs/architecture.md) for the runtime model and CALL-E integration boundary.
+
+## Security
+
+See [`docs/security.md`](docs/security.md). The prototype deliberately does not claim provider signature verification, persistent enterprise storage, RBAC, or production-grade webhook infrastructure unless those controls are actually configured.
+
+## Demo
+
+See [`docs/demo-script.md`](docs/demo-script.md). The intended recording is under three minutes and demonstrates the safety gate, structured outcome contract, idempotency behavior and impact thesis.
 
 ## Repository layout
 
 ```text
 .
+├── .github/workflows/ci.yml
 ├── docs/
 │   ├── architecture.md
-│   ├── security.md
+│   ├── demo-script.md
 │   ├── grant-proposal.md
-│   └── demo-script.md
+│   └── security.md
 ├── src/
-│   ├── domain.ts
-│   ├── policy.ts
-│   ├── ledger.ts
-│   ├── simulator.ts
 │   ├── calle.ts
+│   ├── cli.ts
+│   ├── domain.ts
+│   ├── fsm.ts
+│   ├── ledger.ts
 │   ├── orchestrator.ts
-│   └── cli.ts
+│   ├── policy.ts
+│   ├── simulator.ts
+│   ├── validation.ts
+│   └── webhook.ts
 ├── tests/
-│   ├── policy.test.ts
 │   ├── ledger.test.ts
-│   └── orchestrator.test.ts
+│   ├── orchestrator.test.ts
+│   ├── policy.test.ts
+│   └── validation.test.ts
+├── .env.example
+├── .gitignore
 ├── package.json
 ├── tsconfig.json
-├── vitest.config.ts
-└── .env.example
+└── vitest.config.ts
 ```
 
-## Relationship to CALL-E
+## CALL-E integration note
 
-AegisFleet uses CALL-E as the phone-execution layer rather than reimplementing telephony. CALL-E's current integration documentation describes a TypeScript server SDK, structured results, goal-driven calls, IVR handling, and both SDK/API/MCP integration paths. The current MCP flow is `plan_call → run_call → get_call_run`; asynchronous completion should be reconciled rather than duplicated.
+The project treats CALL-E as the phone-execution provider. The current prototype uses its TypeScript server SDK for backend-controlled execution. The documented MCP lifecycle is `plan_call → run_call → get_call_run`; the repository keeps provider-specific concerns behind `src/calle.ts` so the business policy remains independent of the transport mechanism.
 
-## Hackathon submission alignment
+## Submission discipline
 
-The current CALL-E hackathon requires a functional application using CALL-E's API, SDK, MCP, CLI, or Skill; a public demonstration video under three minutes; and a pull request to the `CALLE-AI/awesome-phone-call-agents` repository. AegisFleet is packaged as a reusable TypeScript application contribution and deliberately includes a safe dry-run path for reproducibility.
+The repository distinguishes between **implemented evidence** and **deployment/submission artifacts**. It does not fabricate a deployed URL, live credentials, a completed contribution PR, or a recorded video. Those are final environment-specific steps.
 
-## Status
+For the community contribution requirement, the intended target is `CALLE-AI/awesome-phone-call-agents`. A contribution PR should be opened from a dedicated branch after the final local/CI verification and should link back to this repository.
 
-**Prototype:** functional local simulation + live adapter scaffolding.
+## Production hardening backlog
 
-**Production gap:** live provider credentials, deployment URL, and final contribution PR are intentionally environment-specific and are not fabricated in this repository.
+The prototype intentionally isolates the remaining enterprise work:
+
+- transactional persistent idempotency store;
+- durable audit storage and verification tooling;
+- authenticated provider webhook ingestion;
+- RBAC and organization-level policy configuration;
+- secrets management and rotation;
+- retention/deletion policies and jurisdiction-specific privacy controls;
+- operator console and global kill switch;
+- TMS/ERP write-back connectors;
+- load, fault-injection and red-team evaluation.
 
 ## License
 
