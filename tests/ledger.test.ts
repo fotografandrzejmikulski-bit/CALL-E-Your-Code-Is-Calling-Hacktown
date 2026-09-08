@@ -16,4 +16,18 @@ describe("audit ledger", () => {
     const record = ledger.transition("op-1", "validated");
     expect(record.auditDigest).toMatch(/^[a-f0-9]{64}$/);
   });
+
+  it("rejects invalid state transitions", () => {
+    const ledger = new AuditLedger();
+    ledger.reserve("op-1");
+    expect(() => ledger.transition("op-1", "resolved")).toThrow(/Invalid incident transition/);
+  });
+
+  it("links successive audit records", () => {
+    const ledger = new AuditLedger();
+    ledger.reserve("op-1");
+    const validated = ledger.transition("op-1", "validated");
+    const approved = ledger.transition("op-1", "approved");
+    expect(approved.previousAuditDigest).toBe(validated.auditDigest);
+  });
 });
