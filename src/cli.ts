@@ -9,14 +9,26 @@ const demoIncident: Incident = {
   phone: "+15550123456",
   closure: "A4 highway closure affecting the planned route.",
   requestedBy: "dispatch-demo",
-  goal: "Inform the driver about the A4 closure, negotiate a safe diversion route, and confirm the revised ETA.",
+  goal: "Inform the driver about the A4 closure, negotiate a diversion route, and confirm the revised ETA.",
 };
+
+function isLiveCommand(command: string): boolean {
+  const mode = (process.env.CALL_E_MODE ?? "dry-run").toLowerCase();
+  if (command === "demo") return false;
+  if (command === "live") {
+    if (mode !== "live") throw new Error("Live execution requires CALL_E_MODE=live");
+    return true;
+  }
+  throw new Error(`Unknown command: ${command}. Use 'demo' or 'live'.`);
+}
 
 async function main() {
   const command = process.argv[2] ?? "demo";
-  const live = command === "live";
+  const live = isLiveCommand(command);
   const ledger = new AuditLedger();
-  const incident = live ? { ...demoIncident, phone: process.env.AEGIS_LIVE_PHONE ?? "" } : demoIncident;
+  const incident = live
+    ? { ...demoIncident, phone: process.env.AEGIS_LIVE_PHONE ?? "" }
+    : demoIncident;
 
   console.log(`AegisFleet | mode=${live ? "LIVE" : "DRY-RUN"}`);
   console.log(`Incident=${incident.id} vehicle=${incident.vehicleId}`);
@@ -29,10 +41,11 @@ async function main() {
     operationKey: result.record.operationKey,
     outcome: result.outcome,
     auditDigest: result.record.auditDigest,
+    previousAuditDigest: result.record.previousAuditDigest,
     callsPlaced: live ? (result.record.callId ? 1 : 0) : 0,
   }, null, 2));
 
-  if (!live) console.log("DRY-RUN GUARANTEE: no network request and no phone call were made.");
+  if (!live) console.log("DRY-RUN GUARANTEE: no provider request and no phone call were made.");
 }
 
 main().catch((error) => {
