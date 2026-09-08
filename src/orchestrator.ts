@@ -4,6 +4,16 @@ import { AuditLedger } from "./ledger.js";
 import { simulateCall } from "./simulator.js";
 import { executeWithCalle } from "./calle.js";
 
+function failureOutcome(message: string) {
+  return {
+    route_acceptance: "unknown" as const,
+    eta_update_time: "",
+    escalation_needed: "urgent" as const,
+    evidence_summary: message,
+    confidence: "unknown" as const,
+  };
+}
+
 export async function runIncident(
   incident: Incident,
   options: { live: boolean; ledger?: AuditLedger } = { live: false },
@@ -12,24 +22,23 @@ export async function runIncident(
   const operationKey = `incident:${incident.id}:call:${incident.vehicleId}`;
   const reserved = ledger.reserve(operationKey);
 
-  if (reserved.state !== "detected") return { record: reserved, reused: true, outcome: reserved.outcome };
+  if (reserved.state !== "detected") {
+    return { record: reserved, reused: true, outcome: reserved.outcome };
+  }
 
   const policy = validateIncident(incident, options.live);
   if (!policy.allowed) {
     const record = ledger.transition(operationKey, "escalated", {
-      outcome: {
-        route_acceptance: "unknown",
-        eta_update_time: "",
-        escalation_needed: "urgent",
-        evidence_summary: policy.reasons.join("; "),
-        confidence: "high",
-      },
+      outcome: failureOutcome(policy.reasons.join("; ")),
     });
     return { record, reused: false, outcome: record.outcome };
   }
 
   ledger.transition(operationKey, "validated");
   ledger.transition(operationKey, "approved");
+
+  // The ledger reservation is created before any provider I/O.
+  // In production this reservation must be backed by a transactional store.
   ledger.transition(operationKey, "calling");
 
   try {
@@ -37,22 +46,19 @@ export async function runIncident(
       ? await executeWithCalle(incident, operationKey)
       : { outcome: simulateCall(incident) };
 
-    const terminalState = canResolve(result.outcome) ? "resolved" : "escalated";
-    const record = ledger.transition(operationKey, terminalState, {
-      ...(result.callId ? { callId: result.callId } : {}),
-      outcome: result.outcome,
-    });
+    const record = ledger.transition(
+      operationKey,
+      canResolve(result.outcome) ? "resolved" : "escalated",
+      {
+        ...(result.callId ? { callId: result.callId } : {}),
+        outcome: result.outcome,
+      },
+    );
     return { record, reused: false, outcome: result.outcome };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown CALL-E execution failure";
     const record = ledger.transition(operationKey, "escalated", {
-      outcome: {
-        route_acceptance: "unknown",
-        eta_update_time: "",
-        escalation_needed: "urgent",
-        evidence_summary: message,
-        confidence: "unknown",
-      },
+      outcome: failureOutcome(message),
     });
     return { record, reused: false, outcome: record.outcome };
   }
