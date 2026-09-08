@@ -34,6 +34,7 @@ export interface CallRecord {
   createdAt: string;
   updatedAt: string;
   outcome?: CallOutcome;
+  previousAuditDigest?: string;
   auditDigest?: string;
 }
 
