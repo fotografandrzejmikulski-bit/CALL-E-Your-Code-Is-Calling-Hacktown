@@ -12,12 +12,7 @@ export class AuditLedger {
     const existing = this.keys.get(key);
     if (existing) return { ...existing };
     const now = new Date().toISOString();
-    const record: CallRecord = {
-      operationKey: key,
-      state: "detected",
-      createdAt: now,
-      updatedAt: now,
-    };
+    const record: CallRecord = { operationKey: key, state: "detected", createdAt: now, updatedAt: now };
     this.commit(record);
     return { ...record };
   }
@@ -34,16 +29,12 @@ export class AuditLedger {
   }
 
   complete(operationKey: string, outcome: CallOutcome, callId?: string): CallRecord {
-    const terminalState: IncidentState =
-      outcome.route_acceptance === "yes" &&
-      Boolean(outcome.eta_update_time.trim()) &&
-      outcome.escalation_needed === "none" &&
-      Boolean(outcome.evidence_summary.trim()) &&
-      outcome.confidence === "high"
-        ? "resolved"
-        : "escalated";
-
-    return this.transition(operationKey, terminalState, {
+    const resolved = outcome.route_acceptance === "yes"
+      && Boolean(outcome.eta_update_time.trim())
+      && outcome.escalation_needed === "none"
+      && Boolean(outcome.evidence_summary.trim())
+      && outcome.confidence === "high";
+    return this.transition(operationKey, resolved ? "resolved" : "escalated", {
       outcome,
       ...(callId ? { callId } : {}),
     });
@@ -58,6 +49,9 @@ export class AuditLedger {
   }
 
   private commit(record: CallRecord): void {
+    record.previousAuditDigest = this.records.length > 0
+      ? this.records[this.records.length - 1].auditDigest
+      : undefined;
     record.auditDigest = this.digest(record);
     if (!this.keys.has(record.operationKey)) this.records.push(record);
     this.keys.set(record.operationKey, record);
